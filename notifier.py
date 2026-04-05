@@ -1,28 +1,31 @@
 import os
+import asyncio
 import requests
-from dotenv import load_dotenv
+
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
-load_dotenv()
+API_ID = int(os.environ["API_ID"])
+API_HASH = os.environ["API_HASH"]
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+BOT_CHAT_ID = int(os.environ["BOT_CHAT_ID"])
 
-API_ID = int(os.getenv("API_ID"))
-API_HASH = os.getenv("API_HASH")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-BOT_CHAT_ID = int(os.getenv("BOT_CHAT_ID"))
+# Wajib untuk Heroku: session disimpan sebagai string di Config Vars
+SESSION_STRING = os.environ["SESSION_STRING"]
 
 WATCH_IDS = {
-    int(x.strip()) for x in os.getenv("WATCH_IDS", "").split(",")
+    int(x.strip())
+    for x in os.environ.get("WATCH_IDS", "").split(",")
     if x.strip()
 }
 
 WATCH_USERNAMES = {
-    x.strip().lower().replace("@", "") for x in os.getenv("WATCH_USERNAMES", "").split(",")
+    x.strip().lower().replace("@", "")
+    for x in os.environ.get("WATCH_USERNAMES", "").split(",")
     if x.strip()
 }
 
-SESSION_NAME = "main_account_session"
-
-client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 
 def send_bot_notification(text: str):
@@ -33,7 +36,7 @@ def send_bot_notification(text: str):
             "chat_id": BOT_CHAT_ID,
             "text": text
         },
-        timeout=15
+        timeout=20
     )
     response.raise_for_status()
 
@@ -57,6 +60,9 @@ def is_watched(sender):
 @client.on(events.NewMessage(incoming=True))
 async def handler(event):
     try:
+        if not event.is_private:
+            return
+
         sender = await event.get_sender()
         if not is_watched(sender):
             return
@@ -69,12 +75,13 @@ async def handler(event):
         notif = f"🔔 Pesan baru dari {name}"
         if username:
             notif += f" (@{username})"
-        notif += f"\nID: {sender_id}\n\n{text}"
+        notif += f"\nID: {sender_id}\n\n{text[:1000]}"
 
         send_bot_notification(notif)
+        print(f"Notif terkirim untuk sender_id={sender_id}")
 
     except Exception as e:
-        print("Error:", e)
+        print("Error saat memproses pesan:", repr(e))
 
 
 async def main():
